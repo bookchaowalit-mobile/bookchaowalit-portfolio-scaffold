@@ -34,8 +34,8 @@ object Portfolio {
         projects.groupBy { it.slug }.filter { it.value.size > 1 }.keys.forEach { issues += ValidationIssue(it, "duplicate slug") }
         for (p in projects) {
             if (!SLUG.matches(p.slug)) issues += ValidationIssue(p.slug, "slug must be kebab-case")
-            if (p.title.isBlank()) issues += ValidationIssue(p.slug, "title is blank")
-            if (p.tech.none { it.isNotBlank() }) issues += ValidationIssue(p.slug, "no tech tags")
+            if (clean(p.title).isEmpty()) issues += ValidationIssue(p.slug, "title is blank")
+            if (p.tech.none { clean(it).isNotEmpty() }) issues += ValidationIssue(p.slug, "no tech tags")
             listOfNotNull(p.repoUrl, p.liveUrl).filterNot { isHttpsUrl(it) }
                 .forEach { issues += ValidationIssue(p.slug, "link must use https: $it") }
             if (p.status == ProjectStatus.LIVE && p.liveUrl == null) issues += ValidationIssue(p.slug, "LIVE project without liveUrl")
@@ -48,12 +48,12 @@ object Portfolio {
      * newer years first; title as a stable tie-breaker.
      */
     fun showcase(projects: List<Project>, q: ProjectQuery = ProjectQuery()): List<Project> {
-        val text = q.text.trim().lowercase()
-        val tech = q.tech?.trim()?.takeIf { it.isNotEmpty() } // blank = no tech filter
+        val text = clean(q.text).lowercase()
+        val tech = q.tech?.let(::clean)?.takeIf { it.isNotEmpty() } // blank = no tech filter
         return projects.filter { p ->
             (q.includeArchived || p.status != ProjectStatus.ARCHIVED) &&
                 (q.platforms.isEmpty() || p.platform in q.platforms) &&
-                (tech == null || p.tech.any { it.trim().equals(tech, ignoreCase = true) }) &&
+                (tech == null || p.tech.any { clean(it).equals(tech, ignoreCase = true) }) &&
                 (text.isEmpty() || text in p.title.lowercase() || p.tech.any { text in it.lowercase() })
         }.sortedWith(
             compareByDescending<Project> { it.featured }
@@ -67,7 +67,7 @@ object Portfolio {
     fun techStats(projects: List<Project>): List<Pair<String, Int>> {
         val display = LinkedHashMap<String, String>()
         val counts = HashMap<String, Int>()
-        for (p in projects) for (t in p.tech.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }) {
+        for (p in projects) for (t in p.tech.map(::clean).filter { it.isNotEmpty() }.distinctBy { it.lowercase() }) {
             val key = t.lowercase()
             display.putIfAbsent(key, t)
             counts[key] = (counts[key] ?: 0) + 1
@@ -79,8 +79,13 @@ object Portfolio {
     /** Absolute https URL with a host, e.g. rejects "https://" and "https:// x". */
     private fun isHttpsUrl(url: String): Boolean {
         val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
-        return uri.scheme == "https" && !uri.host.isNullOrEmpty()
+        return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrEmpty()
     }
+
+    private val INVISIBLE = setOf('\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF')
+
+    /** Trims and drops zero-width characters (U+200B, U+2060, BOM...) so they count as blank. */
+    private fun clean(s: String): String = s.filterNot { it in INVISIBLE }.trim()
 
     /** Count per platform, including zero entries, in enum order. */
     fun platformCounts(projects: List<Project>): Map<Platform, Int> =

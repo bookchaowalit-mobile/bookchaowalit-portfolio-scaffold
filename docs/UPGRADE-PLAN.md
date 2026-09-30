@@ -32,3 +32,9 @@ Compose UI is still a placeholder and the Android build is unverified locally.
 - Fixed showcase filter: a blank tech filter hid every project, and padded values (" kotlin") matched nothing; blank now means no filter and tags are compared trimmed.
 - 6 more edge-case tests (10 total). Verified with `./gradlew -p core test --offline`.
 - Still not verified locally: the Compose `app/` (no Android SDK; dl.google.com is blocked here).
+
+## Done in this pass (pass 3)
+
+- Blank checks now ignore zero-width characters (U+200B/U+2060/BOM): a `"​"` title or tag set passed validation, a zero-width search/tech filter hid every project, and `"Kotlin​"` was counted as a separate tech in `techStats`.
+- Link validation accepts an upper-case scheme (`HTTPS://...` is a valid https URL).
+- 4 regression tests (14 total), verified with `./gradlew -p core test --offline`.
