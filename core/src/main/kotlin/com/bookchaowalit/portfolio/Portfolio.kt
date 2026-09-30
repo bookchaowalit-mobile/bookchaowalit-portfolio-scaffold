@@ -35,8 +35,8 @@ object Portfolio {
         for (p in projects) {
             if (!SLUG.matches(p.slug)) issues += ValidationIssue(p.slug, "slug must be kebab-case")
             if (p.title.isBlank()) issues += ValidationIssue(p.slug, "title is blank")
-            if (p.tech.isEmpty()) issues += ValidationIssue(p.slug, "no tech tags")
-            listOfNotNull(p.repoUrl, p.liveUrl).filterNot { it.startsWith("https://") }
+            if (p.tech.none { it.isNotBlank() }) issues += ValidationIssue(p.slug, "no tech tags")
+            listOfNotNull(p.repoUrl, p.liveUrl).filterNot { isHttpsUrl(it) }
                 .forEach { issues += ValidationIssue(p.slug, "link must use https: $it") }
             if (p.status == ProjectStatus.LIVE && p.liveUrl == null) issues += ValidationIssue(p.slug, "LIVE project without liveUrl")
         }
@@ -49,10 +49,11 @@ object Portfolio {
      */
     fun showcase(projects: List<Project>, q: ProjectQuery = ProjectQuery()): List<Project> {
         val text = q.text.trim().lowercase()
+        val tech = q.tech?.trim()?.takeIf { it.isNotEmpty() } // blank = no tech filter
         return projects.filter { p ->
             (q.includeArchived || p.status != ProjectStatus.ARCHIVED) &&
                 (q.platforms.isEmpty() || p.platform in q.platforms) &&
-                (q.tech == null || p.tech.any { it.equals(q.tech, ignoreCase = true) }) &&
+                (tech == null || p.tech.any { it.trim().equals(tech, ignoreCase = true) }) &&
                 (text.isEmpty() || text in p.title.lowercase() || p.tech.any { text in it.lowercase() })
         }.sortedWith(
             compareByDescending<Project> { it.featured }
@@ -73,6 +74,12 @@ object Portfolio {
         }
         return counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .map { display.getValue(it.key) to it.value }
+    }
+
+    /** Absolute https URL with a host, e.g. rejects "https://" and "https:// x". */
+    private fun isHttpsUrl(url: String): Boolean {
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+        return uri.scheme == "https" && !uri.host.isNullOrEmpty()
     }
 
     /** Count per platform, including zero entries, in enum order. */
